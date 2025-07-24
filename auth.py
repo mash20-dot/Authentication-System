@@ -1,7 +1,9 @@
 from flask import Flask, request, jsonify
 from flask_jwt_extended import create_access_token, set_access_cookies, JWTManager
+from flask_jwt_extended import get_jwt_identity, get_jwt, verify_jwt_in_request
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import timedelta, datetime, timezone
 import os
 
 db = SQLAlchemy()
@@ -27,6 +29,37 @@ class User(db.Model):
     password = db.Column(db.String(300))
 
 
+# Define how early before expiration you want to refresh the token
+REFRESH_WINDOW_MINUTES = 60
+#Refreshing token  
+@app.after_request
+def refresh_expiring_jwts(response):
+    try:
+        #verify if jwt is valid
+        verify_jwt_in_request(optional=True) 
+
+        #asking when the token is going to expire
+        exp_timestamp = get_jwt()["exp"]
+        
+        #asking what time is it
+        now = datetime.now(timezone.utc)
+        
+        #looking ahead 60 minutes from now
+        target_timestamp = datetime.timestamp(now + timedelta(minutes=REFRESH_WINDOW_MINUTES))
+        
+        #asking if the key will espire in that 60 minutes
+        if target_timestamp > exp_timestamp:
+            
+            #then set a new key and save in cookies
+            access_token = create_access_token(identity=get_jwt_identity())
+            set_access_cookies(response, access_token)
+        return response
+    except (RuntimeError, KeyError):
+      #return response if jwt is invalid
+        return response
+
+
+
 @app.route('/signup', methods=['POST'])
 def sign():
     data = request.get_json()
@@ -35,7 +68,7 @@ def sign():
     email = data.get('email')
     password = data.get('email')
 
-    #FIX IT
+
     Missing_fields = []
     if not firstname:
         Missing_fields.append('firstname')
@@ -46,7 +79,7 @@ def sign():
     if not password:
         Missing_fields.append('password')
     if Missing_fields:
-            return jsonify({f"missing fields, {Missing_fields}"}), 400
+            return jsonify({"Error": f"missing fields: {Missing_fields}"}), 400
     
     existing_user = User.query.filter_by(email=email).first()
     if existing_user:
@@ -73,8 +106,9 @@ def log():
     if not password:
         Missing_fields.append('password')
     if Missing_fields:
-        return jsonify({f"missing_fields, {Missing_fields}"}), 400
-
+        return jsonify({"Error": f"missing_fields: {Missing_fields}"}), 400
+        
+    
     add = User.query.filter_by(email=email).first()
     if not add:
         return jsonify({'message': 'Invalid email'}), 400
@@ -83,6 +117,8 @@ def log():
         pass
     else:
         return jsonify({'message': 'Invalid password'}), 400
+    
+    
     
     access_token = create_access_token(identity=email)
 
@@ -94,12 +130,6 @@ def log():
     return response
 
     
-
-
-
-
-
-
 
 with app.app_context():
     db.create_all()

@@ -66,7 +66,7 @@ def sign():
     firstname = data.get('firstname')
     lastname = data.get('lastname')
     email = data.get('email')
-    password = data.get('email')
+    password = data.get('password')
 
 
     Missing_fields = []
@@ -96,38 +96,41 @@ def sign():
 
 @app.route('/login', methods=['POST'])
 def log():
-    data = request.get_json()
-    email = data.get('email')
-    password = data.get('password')
+       
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
 
-    Missing_fields = []
-    if not email:
-        Missing_fields.append('email')
-    if not password:
-        Missing_fields.append('password')
-    if Missing_fields:
-        return jsonify({"Error": f"missing_fields: {Missing_fields}"}), 400
+        #FIX THIS MISSING FIELDS 
+        Missing_fields = []
+        if not email:
+            Missing_fields.append('email')
+        if not password:
+            Missing_fields.append('password')
+        if Missing_fields:
+            return jsonify({"Error": f"Missing_fields: {Missing_fields}"}), 400
         
-    
-    add = User.query.filter_by(email=email).first()
-    if not add:
-        return jsonify({'message': 'Invalid email'}), 400
-    #FIX HERE
-    if check_password_hash(add.password, password):
-        pass
-    else:
-        return jsonify({'message': 'Invalid password'}), 400
-    
-    
-    
-    access_token = create_access_token(identity=email)
-
-    response = jsonify({
-        'message': 'Login successful',
-        'access_token': access_token
-    })
-    set_access_cookies(response, access_token)
-    return response
+        #finds user by email
+        existing_user = User.query.filter_by(email=email).first()
+        if not existing_user:
+             return jsonify({'message': 'Invalid email'}), 401
+        
+        #hashes the entered password and comapare it to the hash password in the db
+        if check_password_hash(existing_user.password, password):
+            pass
+        else:
+            return jsonify({'message': 'Invalid password'}), 401
+        
+        
+        #create an access token for the user to verify their identity when visiting a protected route
+        access_token = create_access_token(identity=email)
+        
+        response = jsonify({
+             'msg': 'logged in successfully',
+               'access_token':access_token})
+        #this add a set cookie header so when the user gets the response the token is automatically stored in the browser's cookie storage
+        set_access_cookies(response, access_token)
+        return response
 
     
 
